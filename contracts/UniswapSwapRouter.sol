@@ -127,8 +127,6 @@ contract UniswapSwapRouter is ReentrancyGuard {
         validToken(tokenIn, tokenOut)
         validInput(amountIn, slippageBps)
     {
-        IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
-
         (uint256 minAmountOut, PoolType poolId, uint24 fee) = getMinAmountOut(
             tokenIn,
             tokenOut,
@@ -139,6 +137,8 @@ contract UniswapSwapRouter is ReentrancyGuard {
         if (minAmountOut <= 0) {
             revert InvalidMinAmountOut();
         }
+
+        IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
 
         if (poolId == PoolType.V2) {
             _swapViaV2(tokenIn, tokenOut, amountIn, minAmountOut);
