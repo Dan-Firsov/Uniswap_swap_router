@@ -5,14 +5,14 @@ import IQuoterV2 from '@uniswap/v3-periphery/artifacts/contracts/lens/QuoterV2.s
 import * as dotenv from 'dotenv';
 import { ethers, formatUnits, ZeroAddress } from 'ethers';
 import hre from 'hardhat';
-import { bigint } from 'hardhat/internal/core/params/argumentTypes';
+import {
+  V2_FACTORY,
+  V2_ROUTER,
+  V3_FACTORY,
+  V3_FEES,
+  V3_QUOTERV2,
+} from './constants';
 dotenv.config();
-
-const V2_FACTORY = '0x8909Dc15e40173Ff4699343b6eB8132c65e18eC6';
-const V2_ROUTER = '0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24';
-const V3_FACTORY = '0x33128a8fC17869897dcE68Ed026d694621f6FDfD';
-const V3_QUOTERV2 = '0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a';
-const V3_FEES = [500, 3000, 10000];
 
 export type PoolResult = {
   type: string;
@@ -70,6 +70,8 @@ export async function getBestUniswapQuote(
           amount: amountsOut[1],
         });
       }
+    } else {
+      console.log('Pair zero address');
     }
   } catch (error) {
     console.error('V2 Error:', error);

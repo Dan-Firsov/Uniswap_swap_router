@@ -55,9 +55,7 @@ describe('UniswapSwapRouter - Functional Tests', function () {
           'Function amount:',
           minAmountOut.amountWithSlippage.toString(),
         );
-        await expect(emittedMinAmountOut).to.equal(
-          minAmountOut.amountWithSlippage,
-        );
+        expect(emittedMinAmountOut).to.equal(minAmountOut.amountWithSlippage);
       }
     });
 

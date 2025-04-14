@@ -13,6 +13,8 @@ import {
   V3_QUOTERV2,
   WETH,
 } from './utils/constants';
+import { ethers } from 'hardhat';
+import { ZeroAddress } from 'ethers';
 dotenv.config();
 
 type PoolResult = {
@@ -22,33 +24,35 @@ type PoolResult = {
 
 describe('Uniswap Pool Analysis', () => {
   it('Find best pool for WETH/USDC swap', async () => {
-    const client = createPublicClient({
-      chain: base,
-      transport: http(process.env.BASE_RPC_URL),
-    });
+    const provider = new ethers.JsonRpcProvider(process.env.BASE_RPC_URL);
+    const wallet = ethers.Wallet.createRandom();
+    const signer = wallet.connect(provider);
 
     const allResults: PoolResult[] = [];
 
     let v2Pair;
     try {
-      v2Pair = await client.readContract({
-        address: V2_FACTORY,
-        abi: IUniswapV2Factory.abi,
-        functionName: 'getPair',
-        args: [WETH, USDC],
-      });
+      const v2Factory = new ethers.Contract(
+        V2_FACTORY,
+        IUniswapV2Factory.abi,
+        signer,
+      );
+      v2Pair = await v2Factory.getPair(WETH, USDC);
     } catch (error) {
       console.error('Error fetching V2 pair:', error);
-      v2Pair = '0x0000000000000000000000000000000000000000';
+      v2Pair = ZeroAddress;
     }
 
-    if (v2Pair !== '0x0000000000000000000000000000000000000000') {
-      const amountsOut = (await client.readContract({
-        address: V2_ROUTER,
-        abi: IUniswapV2Router02.abi,
-        functionName: 'getAmountsOut',
-        args: [parseEther('1'), [WETH, USDC]],
-      })) as bigint[];
+    if (v2Pair !== ZeroAddress) {
+      const v2Router = new ethers.Contract(
+        V2_ROUTER,
+        IUniswapV2Router02.abi,
+        signer,
+      );
+      const amountsOut: bigint[] = await v2Router.getAmountsOut(
+        ethers.parseEther('1'),
+        [WETH, USDC],
+      );
 
       if (amountsOut && amountsOut.length > 1) {
         allResults.push({
@@ -59,43 +63,41 @@ describe('Uniswap Pool Analysis', () => {
     }
 
     const v3Promises = V3_FEES.map(async (fee) => {
-      const poolAddress = await client.readContract({
-        address: V3_FACTORY,
-        abi: IUniswapV3Factory.abi,
-        functionName: 'getPool',
-        args: [WETH, USDC, fee],
-      });
+      const v3Factory = new ethers.Contract(
+        V3_FACTORY,
+        IUniswapV3Factory.abi,
+        signer,
+      );
+      const poolAddress = await v3Factory.getPool(WETH, USDC, fee);
 
-      if (poolAddress === '0x0000000000000000000000000000000000000000')
-        return null;
+      if (poolAddress === ZeroAddress) return null;
 
       try {
+        const v3Quoter = new ethers.Contract(
+          V3_QUOTERV2,
+          IQuoterV2.abi,
+          signer,
+        );
         const params = {
           tokenIn: WETH,
           tokenOut: USDC,
-          amountIn: parseEther('1'),
+          amountIn: ethers.parseEther('1'),
           fee: BigInt(fee),
           sqrtPriceLimitX96: 0n,
         };
-        const [amountOut] = (await client.readContract({
-          address: V3_QUOTERV2,
-          abi: IQuoterV2.abi,
-          functionName: 'quoteExactInputSingle',
-          args: [params],
-        })) as [bigint];
-        return {
+        const [amountOut]: [bigint] =
+          await v3Quoter.quoteExactInputSingle.staticCall(params);
+        allResults.push({
           type: `V3 ${Number(fee) / 100}%`,
           amount: amountOut,
-        } as PoolResult;
+        });
       } catch (error) {
         console.error(`Error quoting V3 fee ${fee}:`, error);
         return null;
       }
     });
-    const v3Results = (await Promise.all(v3Promises)).filter(
-      Boolean,
-    ) as PoolResult[];
-    allResults.push(...v3Results);
+
+    await Promise.all(v3Promises);
 
     if (allResults.length === 0) {
       throw new Error('No liquidity pools found');
@@ -108,10 +110,10 @@ describe('Uniswap Pool Analysis', () => {
 
     console.log('=== Pool Analysis Results ===');
     allResults.forEach(({ type, amount }) => {
-      console.log(`${type}: ${formatUnits(amount, 6)} USDC`);
+      console.log(`${type}: ${ethers.formatUnits(amount, 6)} USDC`);
     });
     console.log(
-      `\nBest pool: ${bestOffer.type} with ${formatUnits(
+      `\nBest pool: ${bestOffer.type} with ${ethers.formatUnits(
         bestOffer.amount,
         6,
       )} USDC`,
